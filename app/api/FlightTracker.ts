@@ -60,7 +60,7 @@ export class FlightTrackerApi {
     const flightCall = await fetch(`${this.url}flights${queryParams}`)
 
     return (await flightCall.json()) as {
-      data?: FlightDataResponse
+      data?: FlightDataResponse[]
       errors?: Array<{ message: string }>
     }
   }
