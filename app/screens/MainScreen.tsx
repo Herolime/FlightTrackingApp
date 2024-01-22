@@ -9,6 +9,7 @@ import {
   getCurrentPositionAsync,
   requestForegroundPermissionsAsync,
 } from "expo-location"
+import { FlightDataRequest, FlightDataResponse, FlightTrackerApi } from "app/api/FlightTracker"
 
 export const MainScreen = () => {
   const [currentLocation, setCurrentLocation] = useState<LocationObjectCoords | undefined>(
@@ -19,27 +20,68 @@ export const MainScreen = () => {
     | undefined
   >(undefined)
 
-  useEffect(() => {
-    const getLocation = async () => {
-      const { status } = await requestForegroundPermissionsAsync()
-      if (status !== "granted") {
-        console.log("Permission to access location was denied")
-        return
-      }
+  const [searchValue, setSearchValue] = useState("")
+  const [flights, setFlights] = useState<FlightDataResponse[]>([])
 
-      const location = await getCurrentPositionAsync({})
-      setCurrentLocation(location.coords)
-
-      setInitialRegion({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      })
+  const getLocation = async () => {
+    const { status } = await requestForegroundPermissionsAsync()
+    if (status !== "granted") {
+      console.log("Permission to access location was denied")
+      return
     }
 
+    const location = await getCurrentPositionAsync({})
+    setCurrentLocation(location.coords)
+
+    setInitialRegion({
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+      latitudeDelta: 0.005,
+      longitudeDelta: 0.005,
+    })
+  }
+
+  const getFlights = async (req: Partial<FlightDataRequest>) => {
+    const trackerApi = new FlightTrackerApi()
+    const result = await trackerApi.getFlights(req)
+    if (result !== undefined) {
+      const { data, errors } = result
+      if (errors && errors.length > 0) {
+        for (const error of errors) {
+          console.error(error)
+        }
+      }
+      if (data) {
+        setFlights(data)
+      }
+    }
+  }
+
+  useEffect(() => {
     getLocation()
   }, [])
+
+  useEffect(() => {
+    if (searchValue && searchValue.length >= 2) {
+      const searchRequest: Partial<FlightDataRequest> = {}
+      if (searchValue.length === 2) {
+        searchRequest.flight_icao = searchValue
+      }
+      if (searchValue.length === 3) {
+        searchRequest.flight_iata = searchValue
+      }
+      if (searchValue.length > 3) {
+        if (searchValue.length === 6) {
+          const checkNumber = searchValue.substring(2)
+          if (!isNaN(Number(checkNumber))) {
+            searchRequest.flight_number = searchValue
+          }
+        }
+      }
+      getFlights(searchRequest)
+    }
+  }, [searchValue])
+
   return (
     <Screen
       preset="auto"
@@ -50,10 +92,14 @@ export const MainScreen = () => {
         {currentLocation && <Marker title="Your Location" coordinate={currentLocation} />}
       </MapView>
       <View style={$searchContainer}>
-        <TextField placeholder="Search for Flight..." />
+        <TextField
+          placeholder="Search for Flight..."
+          value={searchValue}
+          onChangeText={(e) => setSearchValue(e)}
+        />
       </View>
-      <View>
-        <SearchResults />
+      <View style={$list}>
+        <SearchResults flights={flights} />
       </View>
     </Screen>
   )
@@ -68,6 +114,10 @@ const $screenContentContainer: ViewStyle = {
 const $map: ViewStyle = {
   width: "100%",
   height: "40%",
+}
+const $list: ViewStyle = {
+  width: "100%",
+  height: "50%",
 }
 
 const $searchContainer: ViewStyle = {
